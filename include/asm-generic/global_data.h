@@ -449,6 +449,12 @@ struct global_data {
 	 */
 	struct spl_handoff *spl_handoff;
 #endif
+#if CONFIG_IS_ENABLED(FIRMWARE_HANDOFF)
+	/**
+	 * @transfer_list: Firmware Handoff Transfer list
+	 */
+	struct transfer_list_header *transfer_list;
+#endif
 #if defined(CONFIG_TRANSLATION_OFFSET)
 	/**
 	 * @translation_offset: optional translation offset
