@@ -347,7 +347,7 @@ static u32 bloblist_calc_chksum(struct bloblist_hdr *hdr)
 	return chksum;
 }
 
-int bloblist_new(ulong addr, uint size)
+int bloblist_new(ulong addr, uint size, uint align_log2)
 {
 	struct bloblist_hdr *hdr;
 
@@ -362,6 +362,7 @@ int bloblist_new(ulong addr, uint size)
 	hdr->magic = BLOBLIST_MAGIC;
 	hdr->size = size;
 	hdr->alloced = hdr->hdr_size;
+	hdr->align_log2 = align_log2 ?: BLOBLIST_BLOB_ALIGN_LOG2;
 	hdr->chksum = 0;
 	gd->bloblist = hdr;
 
@@ -505,7 +506,7 @@ int bloblist_init(void)
 		}
 		log_debug("Creating new bloblist size %lx at %lx\n", size,
 			  addr);
-		ret = bloblist_new(addr, size);
+		ret = bloblist_new(addr, size, 0);
 	} else {
 		log_debug("Found existing bloblist size %lx at %lx\n", size,
 			  addr);
