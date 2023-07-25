@@ -36,16 +36,24 @@ static struct tag_name {
 	enum bloblist_tag_t tag;
 	const char *name;
 } tag_name[] = {
-	{ BLOBLISTT_NONE, "(none)" },
+	{ BLOBLISTT_VOID, "(void)" },
 
 	/* BLOBLISTT_AREA_FIRMWARE_TOP */
+	{ BLOBLISTT_CONTROL_FDT, "Control FDT" },
+	{ BLOBLISTT_HOB_BLOCK, "HOB block" },
+	{ BLOBLISTT_HOB_LIST, "HOB list" },
+	{ BLOBLISTT_ACPI_TABLES, "ACPI tables for x86" },
 
 	/* BLOBLISTT_AREA_FIRMWARE */
-	{ BLOBLISTT_ACPI_GNVS, "ACPI GNVS" },
-	{ BLOBLISTT_INTEL_VBT, "Intel Video-BIOS table" },
 	{ BLOBLISTT_TPM2_TCG_LOG, "TPM v2 log space" },
 	{ BLOBLISTT_TCPA_LOG, "TPM log space" },
-	{ BLOBLISTT_ACPI_TABLES, "ACPI tables for x86" },
+	{ BLOBLISTT_ACPI_GNVS, "ACPI GNVS" },
+
+	/* BLOBLISTT_AREA_ARM */
+	{ BLOBLISTT_OPTEE_PAGABLE_PART, "OP-TEE pagable part" },
+
+	/* BLOBLISTT_AREA_OTHER */
+	{ BLOBLISTT_INTEL_VBT, "Intel Video-BIOS table" },
 	{ BLOBLISTT_SMBIOS_TABLES, "SMBIOS tables for x86" },
 	{ BLOBLISTT_VBOOT_CTX, "Chrome OS vboot context" },
 
