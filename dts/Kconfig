@@ -110,8 +110,11 @@ config OF_BOARD
 	default y if SANDBOX || OF_HAS_PRIOR_STAGE
 	help
 	  If this option is enabled, the device tree is provided at runtime by
-	  a custom function called board_fdt_blob_setup(). The board must
-	  implement this function if it wishes to provide special behaviour.
+	  a custom function called board_fdt_blob_setup().
+	  If this option is enabled, bloblist is provided at runtime by a
+	  custom function called board_bloblist_from_boot_arg().
+	  The board must implement these functions if it wishes to provide
+	  special behaviour.
 
 	  With this option, the device tree build by U-Boot may be overridden or
 	  ignored. See OF_HAS_PRIOR_STAGE.
