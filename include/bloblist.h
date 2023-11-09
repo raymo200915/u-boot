@@ -173,12 +173,12 @@ enum bloblist_tag_t {
  * @hdr_size: Size of this header, normally sizeof(struct bloblist_hdr). The
  *	first bloblist_rec starts at this offset from the start of the header
  * @align_log2: Power of two of the maximum alignment required by this list
- * @alloced: Total size allocated so far for this bloblist. This starts out as
+ * @used_size: Size allocated so far for this bloblist. This starts out as
  *	sizeof(bloblist_hdr) since we need at least that much space to store a
  *	valid bloblist
- * @size: Total size of the bloblist (non-zero if valid) including this header.
- *	The bloblist extends for this many bytes from the start of this header.
- *	When adding new records, the bloblist can grow up to this size.
+ * @total_size: The number of total bytes that the bloblist can occupy.
+ *	Any blob producer must check if there is sufficient space before adding
+ *	a record to the bloblist.
  */
 struct bloblist_hdr {
 	u32 magic;
@@ -186,9 +186,8 @@ struct bloblist_hdr {
 	u8 version;
 	u8 hdr_size;
 	u8 align_log2;
-
-	u32 alloced;
-	u32 size;
+	u32 used_size;
+	u32 total_size;
 };
 
 /**
@@ -360,10 +359,10 @@ int bloblist_finish(void);
  * This returns useful information about the bloblist
  *
  * @basep: Returns base address of bloblist
- * @sizep: Returns the number of bytes used in the bloblist
- * @allocedp: Returns the total space allocated to the bloblist
+ * @tsizep: Returns the total number of bytes of the bloblist
+ * @usizep: Returns the number of used bytes of the bloblist
  */
-void bloblist_get_stats(ulong *basep, ulong *sizep, ulong *allocedp);
+void bloblist_get_stats(ulong *basep, ulong *tsizep, ulong *usizep);
 
 /**
  * bloblist_get_base() - Get the base address of the bloblist
@@ -378,6 +377,13 @@ ulong bloblist_get_base(void);
  * Return: the size in bytes
  */
 ulong bloblist_get_size(void);
+
+/**
+ * bloblist_get_total_size() - Get the total size of the bloblist
+ *
+ * Return: the size in bytes
+ */
+ulong bloblist_get_total_size(void);
 
 /**
  * bloblist_show_stats() - Show information about the bloblist
