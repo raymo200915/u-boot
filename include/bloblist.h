@@ -438,6 +438,20 @@ void bloblist_reloc(void *to, uint to_size, void *from, uint from_size);
  */
 int bloblist_init(void);
 
+#if CONFIG_IS_ENABLED(ARCH_QEMU)
+int board_bloblist_from_boot_arg(unsigned long addr, unsigned long size);
+#else
+/*
+ * A board need to implement this custom function if it needs to retrieve
+ * bloblist from a previous loader
+ */
+static inline int board_bloblist_from_boot_arg(unsigned long __always_unused addr,
+					       unsigned long __always_unused size)
+{
+	return -1;
+}
+#endif
+
 #if CONFIG_IS_ENABLED(BLOBLIST)
 /**
  * bloblist_maybe_init() - Init the bloblist system if not already done

@@ -483,15 +483,8 @@ int bloblist_init(void)
 	bool fixed = IS_ENABLED(CONFIG_BLOBLIST_FIXED);
 	int ret = -ENOENT;
 	ulong addr, size;
-	bool expected;
+	bool expected = fixed;
 
-	/**
-	 * We don't expect to find an existing bloblist in the first phase of
-	 * U-Boot that runs. Also we have no way to receive the address of an
-	 * allocated bloblist from a previous stage, so it must be at a fixed
-	 * address.
-	 */
-	expected = fixed && !u_boot_first_phase();
 	if (spl_prev_phase() == PHASE_TPL && !IS_ENABLED(CONFIG_TPL_BLOBLIST))
 		expected = false;
 	if (fixed)
@@ -499,14 +492,17 @@ int bloblist_init(void)
 				      CONFIG_BLOBLIST_ADDR);
 	size = CONFIG_BLOBLIST_SIZE;
 	if (expected) {
-		ret = bloblist_check(addr, size);
-		if (ret) {
-			log_warning("Expected bloblist at %lx not found (err=%d)\n",
+		if (IS_ENABLED(CONFIG_OF_BOARD))
+			/* Get the bloblist from previous loader */
+			ret = board_bloblist_from_boot_arg(addr, size);
+		else
+			ret = bloblist_check(addr, size);
+
+		if (ret)
+			log_warning("Bloblist at %lx not found, err=%d\n",
 				    addr, ret);
-		} else {
-			/* Get the real size, if it is not what we expected */
+		else
 			size = gd->bloblist->total_size;
-		}
 	}
 	if (ret) {
 		if (CONFIG_IS_ENABLED(BLOBLIST_ALLOC)) {
@@ -516,7 +512,8 @@ int bloblist_init(void)
 				return log_msg_ret("alloc", -ENOMEM);
 			addr = map_to_sysmem(ptr);
 		} else if (!fixed) {
-			return log_msg_ret("!fixed", ret);
+			return log_msg_ret("BLOBLIST_FIXED is not enabled",
+					   ret);
 		}
 		log_debug("Creating new bloblist size %lx at %lx\n", size,
 			  addr);
