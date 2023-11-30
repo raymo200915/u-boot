@@ -4,6 +4,9 @@
  */
 
 #include <common.h>
+#if IS_ENABLED(CONFIG_OF_BOARD) && IS_ENABLED(CONFIG_BLOBLIST)
+#include <bloblist.h>
+#endif
 #include <cpu_func.h>
 #include <dm.h>
 #include <efi.h>
@@ -102,6 +105,16 @@ static struct mm_region qemu_arm64_mem_map[] = {
 struct mm_region *mem_map = qemu_arm64_mem_map;
 #endif
 
+#if IS_ENABLED(CONFIG_OF_BOARD)
+/* Boot parameters saved from lowlevel_init.S */
+struct {
+	unsigned long arg0;
+	unsigned long arg1;
+	unsigned long arg2;
+	unsigned long arg3;
+} qemu_saved_args __section(".data");
+#endif
+
 int board_init(void)
 {
 	return 0;
@@ -142,6 +155,47 @@ void *board_fdt_blob_setup(int *err)
 	*err = 0;
 	/* QEMU loads a generated DTB for us at the start of RAM. */
 	return (void *)CFG_SYS_SDRAM_BASE;
+}
+
+int board_bloblist_from_boot_arg(unsigned long __maybe_unused addr,
+				 unsigned long __maybe_unused size)
+{
+	int ret = -ENOENT;
+
+#if IS_ENABLED(CONFIG_OF_BOARD) && IS_ENABLED(CONFIG_BLOBLIST)
+	unsigned long fdt;
+
+	ret = bloblist_check(qemu_saved_args.arg3, 0);
+	if (ret)
+		return ret;
+
+	bloblist_show_stats();
+	bloblist_show_list();
+	if (gd->bloblist->total_size > size) {
+		gd->bloblist = NULL; /* Reset the gd bloblist pointer */
+		log_err("Bloblist total size:%d, board reserved size:%ld\n",
+			gd->bloblist->total_size, size);
+		return -ENOSPC;
+	}
+
+	/* Check the register conventions */
+	fdt = (unsigned long)bloblist_find(BLOBLISTT_CONTROL_FDT, 0);
+	if (IS_ENABLED(CONFIG_ARM64)) {
+		if (fdt != qemu_saved_args.arg0 || qemu_saved_args.arg2 != 0)
+			ret = -EIO;
+	} else {
+		if (fdt != qemu_saved_args.arg2 || qemu_saved_args.arg0 != 0)
+			ret = -EIO;
+	}
+
+	if (ret)
+		gd->bloblist = NULL;  /* Reset the gd bloblist pointer */
+	else
+		memmove((void *)addr,  (void *)qemu_saved_args.arg3,
+			gd->bloblist->total_size);
+#endif
+
+	return ret;
 }
 
 void enable_caches(void)

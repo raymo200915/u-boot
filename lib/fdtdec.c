@@ -7,7 +7,11 @@
  */
 
 #ifndef USE_HOSTCC
+
+#define LOG_CATEGORY	LOGC_DT
+
 #include <common.h>
+#include <bloblist.h>
 #include <boot_fit.h>
 #include <display_options.h>
 #include <dm.h>
@@ -86,7 +90,7 @@ static const char *const fdt_src_name[] = {
 	[FDTSRC_FIT] = "fit",
 	[FDTSRC_BOARD] = "board",
 	[FDTSRC_EMBED] = "embed",
-	[FDTSRC_ENV] = "env",
+	[FDTSRC_ENV] = "env"
 };
 
 const char *fdtdec_get_srcname(void)
@@ -1665,21 +1669,45 @@ int fdtdec_setup(void)
 {
 	int ret;
 
-	/* The devicetree is typically appended to U-Boot */
-	if (IS_ENABLED(CONFIG_OF_SEPARATE)) {
-		gd->fdt_blob = fdt_find_separate();
-		gd->fdt_src = FDTSRC_SEPARATE;
-	} else { /* embed dtb in ELF file for testing / development */
-		gd->fdt_blob = dtb_dt_embedded();
-		gd->fdt_src = FDTSRC_EMBED;
-	}
-
-	/* Allow the board to override the fdt address. */
+	/*
+	 * The devicetree is typically appended to U-Boot.
+	 * Option 1: From bloblist.
+	 * Option 2: From a specified memory address.
+	 */
 	if (IS_ENABLED(CONFIG_OF_BOARD)) {
-		gd->fdt_blob = board_fdt_blob_setup(&ret);
+		/*
+		 * DTB is from board.
+		 * Either from bloblist or a platform specified memory.
+		 */
+		ret = bloblist_maybe_init();
 		if (ret)
 			return ret;
+
+		/* Check if a DTB exists in bloblist first */
+		if (IS_ENABLED(CONFIG_BLOBLIST)) {
+			gd->fdt_blob = bloblist_find(BLOBLISTT_CONTROL_FDT, 0);
+			if (gd->fdt_blob) {
+				log_info("Fdt from bloblist at 0x%lx\n",
+					 (unsigned long)gd->fdt_blob);
+			}
+		}
+		if (!gd->fdt_blob) {
+			/* Apply DTB from a platform specified memory */
+			gd->fdt_blob = board_fdt_blob_setup(&ret);
+			if (ret)
+				return ret;
+			log_info("Fdt from memory at 0x%lx\n",
+				 (unsigned long)gd->fdt_blob);
+		}
 		gd->fdt_src = FDTSRC_BOARD;
+	} else {
+		if (IS_ENABLED(CONFIG_OF_SEPARATE)) {
+			gd->fdt_blob = fdt_find_separate();
+			gd->fdt_src = FDTSRC_SEPARATE;
+		} else { /* embed dtb in ELF file for testing / development */
+			gd->fdt_blob = dtb_dt_embedded();
+			gd->fdt_src = FDTSRC_EMBED;
+		}
 	}
 
 	/* Allow the early environment to override the fdt address */

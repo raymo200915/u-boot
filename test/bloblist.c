@@ -78,7 +78,7 @@ static int bloblist_test_init(struct unit_test_state *uts)
 	ut_asserteq(-EPROTONOSUPPORT, bloblist_check(TEST_ADDR,
 						     TEST_BLOBLIST_SIZE));
 
-	ut_asserteq(-ENOSPC, bloblist_new(TEST_ADDR, 0x10, 0));
+	ut_asserteq(-ENOSPC, bloblist_new(TEST_ADDR, 0xc, 0));
 	ut_asserteq(-EFAULT, bloblist_new(1, TEST_BLOBLIST_SIZE, 0));
 	ut_assertok(bloblist_new(TEST_ADDR, TEST_BLOBLIST_SIZE, 0));
 
@@ -89,9 +89,6 @@ static int bloblist_test_init(struct unit_test_state *uts)
 	hdr->magic++;
 	ut_asserteq_ptr(NULL, bloblist_check_magic(TEST_ADDR));
 	hdr->magic--;
-
-	hdr->flags++;
-	ut_asserteq(-EIO, bloblist_check(TEST_ADDR, TEST_BLOBLIST_SIZE));
 
 	return 1;
 }
@@ -107,7 +104,8 @@ static int bloblist_test_blob(struct unit_test_state *uts)
 	hdr = clear_bloblist();
 	ut_assertnull(bloblist_find(TEST_TAG, TEST_BLOBLIST_SIZE));
 	ut_assertok(bloblist_new(TEST_ADDR, TEST_BLOBLIST_SIZE, 0));
-	ut_asserteq(TEST_BLOBLIST_SIZE, bloblist_get_size());
+	ut_asserteq(sizeof(struct bloblist_hdr), bloblist_get_size());
+	ut_asserteq(TEST_BLOBLIST_SIZE, bloblist_get_total_size());
 	ut_asserteq(TEST_ADDR, bloblist_get_base());
 	ut_asserteq(map_to_sysmem(hdr), TEST_ADDR);
 
@@ -201,21 +199,17 @@ static int bloblist_test_checksum(struct unit_test_state *uts)
 	 * change the size or alloced fields, since that will crash the code.
 	 * It has to rely on these being correct.
 	 */
-	hdr->flags--;
-	ut_asserteq(-EIO, bloblist_check(TEST_ADDR, TEST_BLOBLIST_SIZE));
-	hdr->flags++;
-
-	hdr->size--;
+	hdr->total_size--;
 	ut_asserteq(-EFBIG, bloblist_check(TEST_ADDR, TEST_BLOBLIST_SIZE));
-	hdr->size++;
-
-	hdr->spare++;
-	ut_asserteq(-EIO, bloblist_check(TEST_ADDR, TEST_BLOBLIST_SIZE));
-	hdr->spare--;
+	hdr->total_size++;
 
 	hdr->chksum++;
 	ut_asserteq(-EIO, bloblist_check(TEST_ADDR, TEST_BLOBLIST_SIZE));
 	hdr->chksum--;
+
+	hdr->align_log2++;
+	ut_asserteq(-EIO, bloblist_check(TEST_ADDR, TEST_BLOBLIST_SIZE));
+	hdr->align_log2--;
 
 	/* Make sure the checksum changes when we add blobs */
 	data = bloblist_add(TEST_TAG, TEST_SIZE, 0);
@@ -237,12 +231,18 @@ static int bloblist_test_checksum(struct unit_test_state *uts)
 	*data2 -= 1;
 
 	/*
-	 * Changing data outside the range of valid data should not affect
-	 * the checksum.
+	 * Changing data outside the range of valid data should affect the
+	 * checksum.
 	 */
 	ut_assertok(bloblist_check(TEST_ADDR, TEST_BLOBLIST_SIZE));
 	data[TEST_SIZE]++;
+	ut_asserteq(-EIO, bloblist_check(TEST_ADDR, TEST_BLOBLIST_SIZE));
+	data[TEST_SIZE]--;
+	ut_assertok(bloblist_check(TEST_ADDR, TEST_BLOBLIST_SIZE));
+
 	data2[TEST_SIZE2]++;
+	ut_asserteq(-EIO, bloblist_check(TEST_ADDR, TEST_BLOBLIST_SIZE));
+	data[TEST_SIZE]--;
 	ut_assertok(bloblist_check(TEST_ADDR, TEST_BLOBLIST_SIZE));
 
 	return 0;
@@ -264,10 +264,10 @@ static int bloblist_test_cmd_info(struct unit_test_state *uts)
 	ut_silence_console(uts);
 	console_record_reset();
 	run_command("bloblist info", 0);
-	ut_assert_nextline("base:     %lx", (ulong)map_to_sysmem(hdr));
-	ut_assert_nextline("size:     400    1 KiB");
-	ut_assert_nextline("alloced:  70     112 Bytes");
-	ut_assert_nextline("free:     390    912 Bytes");
+	ut_assert_nextline("base:       %lx", (ulong)map_to_sysmem(hdr));
+	ut_assert_nextline("total size: 400    1 KiB");
+	ut_assert_nextline("used size:  48     72 Bytes");
+	ut_assert_nextline("free:       3b8    952 Bytes");
 	ut_assert_console_end();
 	ut_unsilence_console(uts);
 
@@ -291,9 +291,9 @@ static int bloblist_test_cmd_list(struct unit_test_state *uts)
 	console_record_reset();
 	run_command("bloblist list", 0);
 	ut_assert_nextline("Address       Size   Tag Name");
-	ut_assert_nextline("%08lx  %8x  8000 SPL hand-off",
+	ut_assert_nextline("%08lx  %8x  fff000 SPL hand-off",
 			   (ulong)map_to_sysmem(data), TEST_SIZE);
-	ut_assert_nextline("%08lx  %8x   106 Chrome OS vboot context",
+	ut_assert_nextline("%08lx  %8x   202 Chrome OS vboot context",
 			   (ulong)map_to_sysmem(data2), TEST_SIZE2);
 	ut_assert_console_end();
 	ut_unsilence_console(uts);
@@ -325,18 +325,18 @@ static int bloblist_test_align(struct unit_test_state *uts)
 		data = bloblist_add(i, size, 0);
 		ut_assertnonnull(data);
 		addr = map_to_sysmem(data);
-		ut_asserteq(0, addr & (BLOBLIST_ALIGN - 1));
+		ut_asserteq(0, addr & (BLOBLIST_BLOB_ALIGN - 1));
 
 		/* Only the bytes in the blob data should be zeroed */
 		for (j = 0; j < size; j++)
 			ut_asserteq(0, data[j]);
-		for (; j < BLOBLIST_ALIGN; j++)
+		for (; j < BLOBLIST_BLOB_ALIGN; j++)
 			ut_asserteq(ERASE_BYTE, data[j]);
 	}
 
 	/* Check larger alignment */
 	for (i = 0; i < 3; i++) {
-		int align = 32 << i;
+		int align = 5 - i;
 
 		data = bloblist_add(3 + i, i * 4, align);
 		ut_assertnonnull(data);
@@ -345,16 +345,16 @@ static int bloblist_test_align(struct unit_test_state *uts)
 	}
 
 	/* Check alignment with an bloblist starting on a smaller alignment */
-	hdr = map_sysmem(TEST_ADDR + BLOBLIST_ALIGN, TEST_BLOBLIST_SIZE);
+	hdr = map_sysmem(TEST_ADDR + BLOBLIST_BLOB_ALIGN, TEST_BLOBLIST_SIZE);
 	memset(hdr, ERASE_BYTE, TEST_BLOBLIST_SIZE);
 	memset(hdr, '\0', sizeof(*hdr));
-	ut_assertok(bloblist_new(TEST_ADDR + BLOBLIST_ALIGN, TEST_BLOBLIST_SIZE,
-				 0));
+	ut_assertok(bloblist_new(TEST_ADDR + BLOBLIST_ALIGN,
+				 TEST_BLOBLIST_SIZE, 0));
 
-	data = bloblist_add(1, 5, BLOBLIST_ALIGN * 2);
+	data = bloblist_add(1, 5, BLOBLIST_ALIGN_LOG2 + 1);
 	ut_assertnonnull(data);
 	addr = map_to_sysmem(data);
-	ut_asserteq(0, addr & (BLOBLIST_ALIGN * 2 - 1));
+	ut_asserteq(0, addr & (BLOBLIST_BLOB_ALIGN * 2 - 1));
 
 	return 0;
 }
@@ -421,7 +421,7 @@ static int bloblist_test_grow(struct unit_test_state *uts)
 
 	ut_asserteq(sizeof(struct bloblist_hdr) +
 		    sizeof(struct bloblist_rec) * 2 + small_size * 2,
-		    hdr->alloced);
+		    hdr->used_size);
 
 	/* Resize the first one */
 	ut_assertok(bloblist_resize(TEST_TAG, small_size + 4));
@@ -442,8 +442,8 @@ static int bloblist_test_grow(struct unit_test_state *uts)
 	hdr = ptr;
 	ut_asserteq(sizeof(struct bloblist_hdr) +
 		    sizeof(struct bloblist_rec) * 2 + small_size * 2 +
-		    BLOBLIST_ALIGN,
-		    hdr->alloced);
+		    BLOBLIST_BLOB_ALIGN,
+		    hdr->used_size);
 
 	return 0;
 }
@@ -473,7 +473,7 @@ static int bloblist_test_shrink(struct unit_test_state *uts)
 	hdr = ptr;
 	ut_asserteq(sizeof(struct bloblist_hdr) +
 		    sizeof(struct bloblist_rec) * 2 + small_size * 2,
-		    hdr->alloced);
+		    hdr->used_size);
 
 	/* Resize the first one */
 	new_size = small_size - BLOBLIST_ALIGN - 4;
@@ -493,7 +493,7 @@ static int bloblist_test_shrink(struct unit_test_state *uts)
 	ut_asserteq(sizeof(struct bloblist_hdr) +
 		    sizeof(struct bloblist_rec) * 2 + small_size * 2 -
 		    BLOBLIST_ALIGN,
-		    hdr->alloced);
+		    hdr->used_size);
 
 	return 0;
 }
@@ -521,12 +521,12 @@ static int bloblist_test_resize_fail(struct unit_test_state *uts)
 	hdr = ptr;
 	ut_asserteq(sizeof(struct bloblist_hdr) +
 		    sizeof(struct bloblist_rec) * 2 + small_size * 2,
-		    hdr->alloced);
+		    hdr->used_size);
 
 	/* Resize the first one, to check the boundary conditions */
 	ut_asserteq(-EINVAL, bloblist_resize(TEST_TAG, -1));
 
-	new_size = small_size + (hdr->size - hdr->alloced);
+	new_size = small_size + (hdr->total_size - hdr->used_size);
 	ut_asserteq(-ENOSPC, bloblist_resize(TEST_TAG, new_size + 1));
 	ut_assertok(bloblist_resize(TEST_TAG, new_size));
 
@@ -558,9 +558,9 @@ static int bloblist_test_resize_last(struct unit_test_state *uts)
 	/* Check the byte after the last blob */
 	alloced_val = sizeof(struct bloblist_hdr) +
 		    sizeof(struct bloblist_rec) * 2 + small_size * 2;
-	ut_asserteq(alloced_val, hdr->alloced);
+	ut_asserteq(alloced_val, hdr->used_size);
 	ut_asserteq_ptr((void *)hdr + alloced_val, blob2 + small_size);
-	ut_asserteq((u8)ERASE_BYTE, *((u8 *)hdr + hdr->alloced));
+	ut_asserteq((u8)ERASE_BYTE, *((u8 *)hdr + hdr->used_size));
 
 	/* Resize the second one, checking nothing changes */
 	ut_asserteq(0, bloblist_resize(TEST_TAG2, small_size + 4));
@@ -577,9 +577,9 @@ static int bloblist_test_resize_last(struct unit_test_state *uts)
 	ut_asserteq((u8)ERASE_BYTE, *((u8 *)hdr + alloced_val + 4));
 
 	/* Check that the new top of the allocated blobs has not been touched */
-	alloced_val += BLOBLIST_ALIGN;
-	ut_asserteq(alloced_val, hdr->alloced);
-	ut_asserteq((u8)ERASE_BYTE, *((u8 *)hdr + hdr->alloced));
+	alloced_val += BLOBLIST_BLOB_ALIGN;
+	ut_asserteq(alloced_val, hdr->used_size);
+	ut_asserteq((u8)ERASE_BYTE, *((u8 *)hdr + hdr->used_size));
 
 	return 0;
 }
