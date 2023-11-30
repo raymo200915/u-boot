@@ -179,6 +179,8 @@ enum bloblist_tag_t {
  * @total_size: The number of total bytes that the bloblist can occupy.
  *	Any blob producer must check if there is sufficient space before adding
  *	a record to the bloblist.
+ * @flags: The TL flags word is intended to signal properties relating to the TL
+ *	as a whole.
  */
 struct bloblist_hdr {
 	u32 magic;
@@ -188,6 +190,7 @@ struct bloblist_hdr {
 	u8 align_log2;
 	u32 used_size;
 	u32 total_size;
+	u32 flags;
 };
 
 /**
