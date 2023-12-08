@@ -148,9 +148,20 @@ int dram_init_banksize(void)
 
 void *board_fdt_blob_setup(int *err)
 {
+	void *fdt = NULL;
 	*err = 0;
-	/* QEMU loads a generated DTB for us at the start of RAM. */
-	return (void *)CFG_SYS_SDRAM_BASE;
+
+	/* Check if a DTB exists in bloblist */
+	if (IS_ENABLED(CONFIG_BLOBLIST)) {
+		if (bloblist_maybe_init())
+			return (void *)CFG_SYS_SDRAM_BASE;
+		fdt = bloblist_find(BLOBLISTT_CONTROL_FDT, 0);
+	}
+	if (!fdt)
+		/* QEMU loads a generated DTB for us at the start of RAM. */
+		return (void *)CFG_SYS_SDRAM_BASE;
+	else
+		return fdt;
 }
 
 int board_bloblist_from_boot_arg(unsigned long addr, unsigned long size)
