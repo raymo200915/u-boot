@@ -542,3 +542,18 @@ int bloblist_maybe_init(void)
 
 	return 0;
 }
+
+int bloblist_check_reg_conv(ulong rfdt, ulong rzero)
+{
+	ulong fdt;
+
+	if (!IS_ENABLED(CONFIG_OF_BOARD))
+		return 0;
+
+	fdt = (ulong)bloblist_find(BLOBLISTT_CONTROL_FDT, 0);
+
+	if (rfdt != fdt || rzero != 0)
+		return -EIO;
+
+	return 0;
+}
