@@ -4,6 +4,7 @@
  */
 
 #include <common.h>
+#include <bloblist.h>
 #include <cpu_func.h>
 #include <dm.h>
 #include <efi.h>
@@ -102,6 +103,14 @@ static struct mm_region qemu_arm64_mem_map[] = {
 struct mm_region *mem_map = qemu_arm64_mem_map;
 #endif
 
+/* Boot parameters saved from lowlevel_init.S */
+struct {
+	unsigned long arg0;
+	unsigned long arg1;
+	unsigned long arg2;
+	unsigned long arg3;
+} qemu_saved_args __section(".data");
+
 int board_init(void)
 {
 	return 0;
@@ -139,9 +148,62 @@ int dram_init_banksize(void)
 
 void *board_fdt_blob_setup(int *err)
 {
+	void *fdt = NULL;
 	*err = 0;
-	/* QEMU loads a generated DTB for us at the start of RAM. */
-	return (void *)CFG_SYS_SDRAM_BASE;
+
+	/* Check if a DTB exists in bloblist */
+	if (IS_ENABLED(CONFIG_BLOBLIST)) {
+		if (bloblist_maybe_init())
+			return (void *)CFG_SYS_SDRAM_BASE;
+		fdt = bloblist_find(BLOBLISTT_CONTROL_FDT, 0);
+	}
+	if (!fdt)
+		/* QEMU loads a generated DTB for us at the start of RAM. */
+		return (void *)CFG_SYS_SDRAM_BASE;
+	else
+		return fdt;
+}
+
+int board_bloblist_from_boot_arg(unsigned long addr, unsigned long size)
+{
+	int ret = -ENOENT;
+	unsigned long reg_fdt;
+	unsigned long reg_zero;
+
+	if (!IS_ENABLED(CONFIG_OF_BOARD) || !IS_ENABLED(CONFIG_BLOBLIST))
+		return -ENOENT;
+
+	ret = bloblist_check(qemu_saved_args.arg3, 0);
+	if (ret)
+		return ret;
+
+	if (gd->bloblist->total_size > size) {
+		gd->bloblist = NULL; /* Reset the gd bloblist pointer */
+		log_err("Board bloblist total size:%d, reserved size:%ld\n",
+			gd->bloblist->total_size, size);
+		return -ENOSPC;
+	}
+
+	if (IS_ENABLED(CONFIG_ARM64)) {
+		reg_fdt = qemu_saved_args.arg0;
+		reg_zero = qemu_saved_args.arg2;
+	} else {
+		reg_fdt = qemu_saved_args.arg2;
+		reg_zero = qemu_saved_args.arg0;
+	}
+	/* Check the register conventions */
+	ret = bloblist_check_reg_conv(reg_fdt, reg_zero);
+
+	if (ret) {
+		gd->bloblist = NULL;  /* Reset the gd bloblist pointer */
+	} else {
+		/* Relocate the bloblist to the fixed address */
+		bloblist_reloc((void *)addr, gd->bloblist->total_size,
+			       gd->bloblist, gd->bloblist->total_size);
+		gd->bloblist = (struct bloblist_hdr *)addr;
+	}
+
+	return ret;
 }
 
 void enable_caches(void)
