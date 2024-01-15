@@ -1,5 +1,12 @@
 menu "Library routines"
 
+config FIRMWARE_HANDOFF
+	bool "Enable support for Firmware Handoff Transfer List"
+	depends on OF_BOARD
+	default n
+	help
+	  Enable retrieving DTB from Firmware Handoff Transfer List
+
 config ADDR_MAP
 	bool "Enable support for non-identity virtual-physical mappings"
 	help
