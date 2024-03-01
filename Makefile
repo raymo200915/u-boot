@@ -1675,7 +1675,7 @@ u-boot.elf: u-boot.bin u-boot-elf.lds
 	$(Q)$(OBJCOPY) -I binary $(PLATFORM_ELFFLAGS) $< u-boot-elf.o
 	$(call if_changed,u-boot-elf)
 
-u-boot-elf.lds: arch/u-boot-elf.lds prepare FORCE
+u-boot-elf.lds: arch/u-boot-elf.lds prepare prepare_git FORCE
 	$(call if_changed_dep,cpp_lds)
 
 # MediaTek's ARM-based u-boot needs a header to contains its load address
@@ -1858,6 +1858,8 @@ PHONY += $(u-boot-dirs)
 $(u-boot-dirs): prepare scripts
 	$(Q)$(MAKE) $(build)=$@
 
+$(filter arch%,$(u-boot-dirs)): prepare_git
+
 tools: prepare
 # The "tools" are needed early
 $(filter-out tools, $(u-boot-dirs)): tools
@@ -1881,7 +1883,7 @@ include/config/uboot.release: include/config/auto.conf FORCE
 # version.h and scripts_basic is processed / created.
 
 # Listed in dependency order
-PHONY += prepare archprepare prepare0 prepare1 prepare2 prepare3
+PHONY += prepare prepare_git update_submodule archprepare prepare0 prepare1 prepare2 prepare3
 
 # prepare3 is used to check if we are building in a separate output directory,
 # and if so do:
@@ -1917,8 +1919,16 @@ archprepare: prepare1 scripts_basic
 prepare0: archprepare FORCE
 	$(Q)$(MAKE) $(build)=.
 
+update_submodule:
+	@echo "Updating Git submodule..."
+	git -C $(srctree) submodule init
+	git -C $(srctree) submodule update
+
 # All the preparing..
 prepare: prepare0
+
+.NOTPARALLEL:
+prepare_git: update_submodule
 
 # Generate some files
 # ---------------------------------------------------------------------------
@@ -2051,7 +2061,7 @@ spl/u-boot-spl-dtb.bin: spl/u-boot-spl
 spl/u-boot-spl-dtb.hex: spl/u-boot-spl
 	@:
 
-spl/u-boot-spl: tools prepare $(if $(CONFIG_SPL_OF_CONTROL),dts/dt.dtb)
+spl/u-boot-spl: tools prepare prepare_git $(if $(CONFIG_SPL_OF_CONTROL),dts/dt.dtb)
 	$(Q)$(MAKE) obj=spl -f $(srctree)/scripts/Makefile.spl all
 
 spl/sunxi-spl.bin: spl/u-boot-spl
@@ -2070,14 +2080,14 @@ tpl/u-boot-tpl.bin: tpl/u-boot-tpl
 	@:
 	$(TPL_SIZE_CHECK)
 
-tpl/u-boot-tpl: tools prepare $(if $(CONFIG_TPL_OF_CONTROL),dts/dt.dtb)
+tpl/u-boot-tpl: tools prepare prepare_git $(if $(CONFIG_TPL_OF_CONTROL),dts/dt.dtb)
 	$(Q)$(MAKE) obj=tpl -f $(srctree)/scripts/Makefile.spl all
 
 vpl/u-boot-vpl.bin: vpl/u-boot-vpl
 	@:
 	$(VPL_SIZE_CHECK)
 
-vpl/u-boot-vpl: tools prepare $(if $(CONFIG_TPL_OF_CONTROL),dts/dt.dtb)
+vpl/u-boot-vpl: tools prepare prepare_git $(if $(CONFIG_TPL_OF_CONTROL),dts/dt.dtb)
 	$(Q)$(MAKE) obj=vpl -f $(srctree)/scripts/Makefile.spl all
 
 TAG_SUBDIRS := $(patsubst %,$(srctree)/%,$(u-boot-dirs) include)
