@@ -1,0 +1,31 @@
+From cbcbda085d586bd197ffc491ba29f49a26e2f30d Mon Sep 17 00:00:00 2001
+From: Raymond Mao <raymond.mao@linaro.org>
+Date: Tue, 2 Apr 2024 10:36:36 -0700
+Subject: [PATCH 4/4] update MbedTLS PKCS7 test suites
+
+Update the PKCS7 test suites for multiple certs.
+
+Signed-off-by: Raymond Mao <raymond.mao@linaro.org>
+---
+ tests/suites/test_suite_pkcs7.data | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/tests/suites/test_suite_pkcs7.data b/tests/suites/test_suite_pkcs7.data
+index d3b83cdf0..2dd1c5610 100644
+--- a/tests/suites/test_suite_pkcs7.data
++++ b/tests/suites/test_suite_pkcs7.data
+@@ -14,9 +14,9 @@ PKCS7 Signed Data Parse with zero signers
+ depends_on:MBEDTLS_MD_CAN_SHA256
+ pkcs7_parse:"data_files/pkcs7_data_no_signers.der":MBEDTLS_PKCS7_SIGNED_DATA
+ 
+-PKCS7 Signed Data Parse Fail with multiple certs #4
++PKCS7 Signed Data Parse Pass with multiple certs #4
+ depends_on:MBEDTLS_MD_CAN_SHA256:MBEDTLS_RSA_C
+-pkcs7_parse:"data_files/pkcs7_data_multiple_certs_signed.der":MBEDTLS_ERR_PKCS7_FEATURE_UNAVAILABLE
++pkcs7_parse:"data_files/pkcs7_data_multiple_certs_signed.der":MBEDTLS_PKCS7_SIGNED_DATA
+ 
+ PKCS7 Signed Data Parse Fail with corrupted cert #5.0
+ depends_on:MBEDTLS_MD_CAN_SHA256:MBEDTLS_RSA_C
+-- 
+2.25.1
+
