@@ -18,6 +18,10 @@
 #include <linux/kernel.h>
 #include <linux/sizes.h>
 
+#if IS_ENABLED(CONFIG_FIRMWARE_HANDOFF)
+#include <transfer_list.h>
+#endif
+
 /* GUIDs for capsule updatable firmware images */
 #define QEMU_ARM_UBOOT_IMAGE_GUID \
 	EFI_GUID(0xf885b085, 0x99f8, 0x45af, 0x84, 0x7d, \
@@ -102,6 +106,15 @@ static struct mm_region qemu_arm64_mem_map[] = {
 struct mm_region *mem_map = qemu_arm64_mem_map;
 #endif
 
+#if IS_ENABLED(CONFIG_FIRMWARE_HANDOFF)
+/* Boot parameters saved from lowlevel_init.S */
+struct {
+	unsigned long arg1;
+	unsigned long arg3;
+} qemu_saved_args __section(".data");
+#define REGISTER_CONVENTION_VERSION_MASK (1 << 24)
+#endif
+
 int board_init(void)
 {
 	return 0;
@@ -152,8 +165,75 @@ int dram_init_banksize(void)
 void *board_fdt_blob_setup(int *err)
 {
 	*err = 0;
-	/* QEMU loads a generated DTB for us at the start of RAM. */
-	return (void *)CFG_SYS_SDRAM_BASE;
+	/*
+	 * QEMU loads a generated DTB for us at the start of RAM. Either
+	 * use this DTB or use the one handoff from previous boot stage.
+	 */
+	void *fdt = (void *)CFG_SYS_SDRAM_BASE;
+
+	if (IS_ENABLED(CONFIG_FIRMWARE_HANDOFF)) {
+		struct transfer_list_header *tl = NULL;
+		struct transfer_list_entry *te_fdt = NULL;
+		void *new_fdt;
+
+		gd->transfer_list = NULL;
+		/*
+		 * If it looks like there's a valid DTB at the start of RAM save
+		 * that as a backup DTB and use the location right after for the
+		 * as the a temporary location of the new DTB.
+		 */
+		if (!fdt_check_header(fdt)) {
+			new_fdt = (uint8_t *)fdt + roundup(fdt_totalsize(fdt), 0x1000);
+			log_debug("A valid DTB already exists at 0x%lx\n", (uintptr_t)fdt);
+		} else {
+			new_fdt = fdt;
+		}
+
+		log_debug("saved args: arg1=0x%lx, arg3=0x%lx\n", qemu_saved_args.arg1,
+			  qemu_saved_args.arg3);
+
+		if (qemu_saved_args.arg1 == TRANSFER_LIST_SIGNATURE |
+		    REGISTER_CONVENTION_VERSION_MASK &&
+		    qemu_saved_args.arg3 &&
+		    transfer_list_check_header((struct transfer_list_header *)
+					       qemu_saved_args.arg3)) {
+			tl = (struct transfer_list_header *)qemu_saved_args.arg3;
+		} else {
+			log_err("No valid Transfer List detected from the saved args\n");
+			return fdt;
+		}
+
+		log_notice("Transfer List detected from 0x%lx, size:%d\n",
+			   (uintptr_t)tl, tl->size);
+
+		// save the Transfer List to global data
+		gd->transfer_list = tl;
+
+		// check if a DTB exists in TEs
+		te_fdt = transfer_list_find(tl, TL_TAG_FDT);
+		if (!te_fdt) {
+			log_err("No valid DTB Transfer Entries detected from the Transfer List\n");
+			return fdt;
+		}
+
+		unsigned long max_size = roundup(te_fdt->data_size, 1 << tl->alignment);
+
+		log_notice("Extract DTB handoff from previous boot stage to 0x%lx, size:%ld\n",
+			   (uintptr_t)new_fdt, max_size);
+
+		if (fdt_open_into(transfer_list_data(te_fdt), new_fdt, max_size)) {
+			log_err("Invalid DTB data extracted from the Transfer Entry\n");
+			return fdt;
+		}
+
+		if (new_fdt != fdt) {
+			log_notice("Copy DTB handoff from previous boot stage to 0x%lx\n",
+				   (uintptr_t)fdt);
+			fdt_move(new_fdt, fdt, fdt_totalsize(new_fdt));
+		}
+	}
+
+	return fdt;
 }
 
 void enable_caches(void)

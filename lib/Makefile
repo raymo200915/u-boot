@@ -3,6 +3,8 @@
 # (C) Copyright 2000-2006
 # Wolfgang Denk, DENX Software Engineering, wd@denx.de.
 
+obj-$(CONFIG_FIRMWARE_HANDOFF) += transfer_list.o
+
 ifndef CONFIG_SPL_BUILD
 
 obj-$(CONFIG_EFI) += efi/

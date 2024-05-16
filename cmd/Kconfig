@@ -748,6 +748,13 @@ config CMD_BLOBLIST
 	  x86 devices the bloblist can be used to hold ACPI tables so that they
 	  remain available in memory.
 
+config CMD_TRANSFER_LIST
+	bool "transfer list"
+	depends on FIRMWARE_HANDOFF
+	default n
+	help
+	  List all entries of the Transfer List handoff to u-boot.
+
 config CMD_CRC32
 	bool "crc32"
 	default y
