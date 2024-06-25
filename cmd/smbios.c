@@ -26,6 +26,43 @@ static const char * const wakeup_type_strings[] = {
 	"AC Power Restored",	/* 0x08 */
 };
 
+static const char * const err_corr_type_strings[] = {
+	"Reserved",		/* 0x00 */
+	"Other",		/* 0x01 */
+	"Unknown",		/* 0x02 */
+	"None",			/* 0x03 */
+	"Parity",		/* 0x04 */
+	"Single-bit ECC",	/* 0x05 */
+	"Multi-bit ECC",	/* 0x06 */
+};
+
+static const char * const sys_cache_type_strings[] = {
+	"Reserved",		/* 0x00 */
+	"Other",		/* 0x01 */
+	"Unknown",		/* 0x02 */
+	"Instruction",		/* 0x03 */
+	"Data",			/* 0x04 */
+	"Unified",		/* 0x05 */
+};
+
+static const char * const associativity_strings[] = {
+	"Reserved",			/* 0x00 */
+	"Other",			/* 0x01 */
+	"Unknown",			/* 0x02 */
+	"Direct Mapped",		/* 0x03 */
+	"2-way Set-Associative",	/* 0x04 */
+	"4-way Set-Associative",	/* 0x05 */
+	"Fully Associative",		/* 0x06 */
+	"8-way Set-Associative",	/* 0x07 */
+	"16-way Set-Associative",	/* 0x08 */
+	"12-way Set-Associative",	/* 0x09 */
+	"24-way Set-Associative",	/* 0x0a */
+	"32-way Set-Associative",	/* 0x0b */
+	"48-way Set-Associative",	/* 0x0c */
+	"64-way Set-Associative",	/* 0x0d */
+	"20-way Set-Associative",	/* 0x0e */
+};
+
 /**
  * smbios_get_string() - get SMBIOS string from table
  *
@@ -131,6 +168,46 @@ static void smbios_print_type2(struct smbios_type2 *table)
 	printf("\n");
 }
 
+const char *smbios_cache_err_corr_type_str(u8 err_corr_type)
+{
+	if (err_corr_type >= ARRAY_SIZE(err_corr_type_strings))
+		err_corr_type = 0;
+	return err_corr_type_strings[err_corr_type];
+}
+
+const char *smbios_cache_sys_cache_type_str(u8 sys_cache_type)
+{
+	if (sys_cache_type >= ARRAY_SIZE(sys_cache_type_strings))
+		sys_cache_type = 0;
+	return sys_cache_type_strings[sys_cache_type];
+}
+
+const char *smbios_cache_associativity_str(u8 associativity)
+{
+	if (associativity >= ARRAY_SIZE(associativity_strings))
+		associativity = 0;
+	return associativity_strings[associativity];
+}
+
+static void smbios_print_type7(struct smbios_type7 *table)
+{
+	printf("Cache Information:\n");
+	printf("\tCache Configuration: 0x%04x\n", table->config);
+	printf("\tMaximum Cache Size: 0x%04x\n", table->max_size);
+	printf("\tInstalled Size: 0x%04x\n", table->inst_size);
+	printf("\tSupported SRAM Type: 0x%04x\n", table->supp_sram_type);
+	printf("\tCurrent SRAM Type: 0x%04x\n", table->curr_sram_type);
+	printf("\tCache Speed: 0x%04x\n", table->speed);
+	printf("\tError Correction Type: %s\n",
+		smbios_cache_err_corr_type_str(table->err_corr_type));
+	printf("\tSystem Cache Type: %s\n",
+		smbios_cache_sys_cache_type_str(table->sys_cache_type));
+	printf("\tAssociativity: %s\n",
+		smbios_cache_associativity_str(table->associativity));
+	printf("\tMaximum Cache Size 2: 0x%04x\n", table->max_size2);
+	printf("\tInstalled Cache Size 2: 0x%04x\n", table->inst_size2);
+}
+
 static void smbios_print_type127(struct smbios_type127 *table)
 {
 	printf("End Of Table\n");
@@ -197,6 +274,9 @@ static int do_smbios(struct cmd_tbl *cmdtp, int flag, int argc,
 			break;
 		case 2:
 			smbios_print_type2((struct smbios_type2 *)pos);
+			break;
+		case 7:
+			smbios_print_type7((struct smbios_type7 *)pos);
 			break;
 		case 127:
 			smbios_print_type127((struct smbios_type127 *)pos);
