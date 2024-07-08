@@ -8,6 +8,9 @@
 #include <sysinfo.h>
 
 struct sysinfo_plat_priv {
+	struct sys_info *t1;
+	struct baseboard_info *t2;
+	struct enclosure_info *t3;
 	struct smbios_type7 t7[SYSINFO_CACHE_LVL_MAX];
 	u8 cache_level;
 	/*
@@ -64,6 +67,7 @@ static int sysinfo_plat_detect(struct udevice *dev)
 static int sysinfo_plat_get_str(struct udevice *dev, int id,
 				    size_t size, char *val)
 {
+	struct sysinfo_plat_priv *priv = dev_get_priv(dev);
 	const char *str = NULL;
 
 	switch (id) {
@@ -72,6 +76,54 @@ static int sysinfo_plat_get_str(struct udevice *dev, int id,
 		 * add those SYSINFO_ID_SMBIOS_ here, which need getting
 		 * strings from the platform-specific driver
 		 */
+		case SYSINFO_ID_SMBIOS_SYSTEM_MANUFACTURER:
+			str = priv->t1->manufacturer;
+			break;
+		case SYSINFO_ID_SMBIOS_SYSTEM_PRODUCT:
+			str = priv->t1->prod_name;
+			break;
+		case SYSINFO_ID_SMBIOS_SYSTEM_VERSION:
+			str = priv->t1->version;
+			break;
+		case SYSINFO_ID_SMBIOS_SYSTEM_SERIAL:
+			str = priv->t1->sn;
+			break;
+		case SYSINFO_ID_SMBIOS_SYSTEM_SKU:
+			str = priv->t1->sku_num;
+			break;
+		case SYSINFO_ID_SMBIOS_SYSTEM_FAMILY:
+			str = priv->t1->family;
+			break;
+		case SYSINFO_ID_SMBIOS_BASEBOARD_MANUFACTURER:
+			str = priv->t2->manufacturer;
+			break;
+		case SYSINFO_ID_SMBIOS_BASEBOARD_PRODUCT:
+			str = priv->t2->prod_name;
+			break;
+		case SYSINFO_ID_SMBIOS_BASEBOARD_VERSION:
+			str = priv->t2->version;
+			break;
+		case SYSINFO_ID_SMBIOS_BASEBOARD_SERIAL:
+			str = priv->t2->sn;
+			break;
+		case SYSINFO_ID_SMBIOS_BASEBOARD_ASSET_TAG:
+			str = priv->t2->asset_tag;
+			break;
+		case SYSINFO_ID_SMBIOS_BASEBOARD_CHASSIS_LOCAT:
+			str = priv->t2->chassis_locat;
+			break;
+		case SYSINFO_ID_SMBIOS_ENCLOSURE_MANUFACTURER:
+			str = priv->t3->manufacturer;
+			break;
+		case SYSINFO_ID_SMBIOS_ENCLOSURE_VERSION:
+			str = priv->t3->version;
+			break;
+		case SYSINFO_ID_SMBIOS_ENCLOSURE_SERIAL:
+			str = priv->t3->sn;
+			break;
+		case SYSINFO_ID_SMBIOS_ENCLOSURE_ASSET_TAG:
+			str = priv->t3->asset_tag;
+			break;
 		default:
 			break;
 	}
@@ -152,6 +204,10 @@ static int sysinfo_plat_probe(struct udevice *dev)
 	struct sysinfo_plat_priv *priv = dev_get_priv(dev);
 	struct sysinfo_plat *plat = dev_get_plat(dev);
 	u8 level;
+
+	priv->t1 = &plat->sys;
+	priv->t2 = &plat->board;
+	priv->t3 = &plat->chassis;
 
 	for (level = 0; level < SYSINFO_CACHE_LVL_MAX; level++) {
 		struct cache_info *pcache = plat->cache + level;

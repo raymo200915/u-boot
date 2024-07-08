@@ -26,7 +26,35 @@ struct __packed cache_info {
 	u8 err_corr_type;
 };
 
+struct sys_info {
+	char *manufacturer;
+	char *prod_name;
+	char *version;
+	char *sn;
+	char *sku_num;
+	char *family;
+};
+
+struct baseboard_info {
+	char *manufacturer;
+	char *prod_name;
+	char *version;
+	char *sn;
+	char *asset_tag;
+	char *chassis_locat;
+};
+
+struct enclosure_info {
+	char *manufacturer;
+	char *version;
+	char *sn;
+	char *asset_tag;
+};
+
 struct sysinfo_plat {
+	struct sys_info sys;
+	struct baseboard_info board;
+	struct enclosure_info chassis;
 	struct cache_info *cache;
 	/* add other sysinfo structure here */
 };
