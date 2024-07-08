@@ -192,6 +192,22 @@ int sysinfo_get_cache_info(u8 level, struct cache_info *cinfo) {
 }
 
 struct sysinfo_plat sysinfo_smbios_armv8 = {
+	.sys.manufacturer = "arm",
+	.sys.prod_name = "arm",
+	.sys.version = "armv8",
+	.sys.sn = "Not Specified",
+	.sys.sku_num = "Not Specified",
+	.sys.family = "arm",
+	.board.manufacturer = "arm",
+	.board.prod_name = "arm",
+	.board.version = "armv8",
+	.board.sn = "Not Specified",
+	.board.asset_tag = "Not Specified",
+	.board.chassis_locat = "Not Specified",
+	.chassis.manufacturer = "arm",
+	.chassis.version = "armv8",
+	.chassis.sn = "Not Specified",
+	.chassis.asset_tag = "Not Specified",
 	.cache = &cache_info_armv8[0],
 };
 
