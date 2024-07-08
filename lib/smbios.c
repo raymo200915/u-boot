@@ -445,6 +445,10 @@ static int smbios_write_type2(ulong *current, int handle,
 	t->asset_tag_number = smbios_add_prop_si(ctx, "asset-tag",
 						 SYSINFO_ID_SMBIOS_BASEBOARD_ASSET_TAG,
 						 NULL);
+	t->chassis_location =
+		smbios_add_prop_si(ctx, "chassis-location",
+				   SYSINFO_ID_SMBIOS_BASEBOARD_CHASSIS_LOCAT,
+				   NULL);
 	t->feature_flags = SMBIOS_BOARD_FEATURE_HOSTING;
 	t->board_type = SMBIOS_BOARD_MOTHERBOARD;
 	t->chassis_handle = handle + 1;
@@ -466,7 +470,19 @@ static int smbios_write_type3(ulong *current, int handle,
 	memset(t, 0, sizeof(struct smbios_type3));
 	fill_smbios_header(t, SMBIOS_SYSTEM_ENCLOSURE, len, handle);
 	smbios_set_eos(ctx, t->eos);
-	t->manufacturer = smbios_add_prop(ctx, "manufacturer", NULL);
+	t->manufacturer =
+		smbios_add_prop_si(ctx, "manufacturer",
+				   SYSINFO_ID_SMBIOS_ENCLOSURE_MANUFACTURER,
+				   NULL);
+	t->version = smbios_add_prop_si(ctx, "version",
+					SYSINFO_ID_SMBIOS_ENCLOSURE_VERSION,
+					NULL);
+	t->serial_number = smbios_add_prop_si(ctx, "serial",
+					      SYSINFO_ID_SMBIOS_ENCLOSURE_SERIAL,
+					      NULL);
+	t->asset_tag_number = smbios_add_prop_si(ctx, "asset-tag",
+						 SYSINFO_ID_SMBIOS_BASEBOARD_ASSET_TAG,
+						 NULL);
 	t->chassis_type = SMBIOS_ENCLOSURE_DESKTOP;
 	t->bootup_state = SMBIOS_STATE_SAFE;
 	t->power_supply_state = SMBIOS_STATE_SAFE;
