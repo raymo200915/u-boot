@@ -6,11 +6,14 @@
  */
 
 #include <dm.h>
+#include <dm/device-internal.h>
+#include <dm/lists.h>
 #include <env.h>
 #include <linux/stringify.h>
 #include <linux/string.h>
 #include <mapmem.h>
 #include <smbios.h>
+//#include <smbios_plat.h>
 #include <sysinfo.h>
 #include <tables_csum.h>
 #include <version.h>
@@ -225,6 +228,8 @@ static int smbios_add_prop_si(struct smbios_ctx *ctx, const char *prop,
 	if (!prop)
 		return smbios_add_string(ctx, dval);
 
+	printf("smbios: %s, sysinfo id: %d\n", prop, sysinfo_id);
+
 	if (sysinfo_id && ctx->dev) {
 		char val[SMBIOS_STR_MAX];
 
@@ -243,6 +248,8 @@ static int smbios_add_prop_si(struct smbios_ctx *ctx, const char *prop,
 			str = ofnode_read_string(ctx->node, prop);
 		} else {
 			const struct map_sysinfo *nprop;
+
+			printf("-------------------------> fallback and try the entire DT\n");
 
 			nprop = convert_sysinfo_to_dt(ctx->subnode_name, prop);
 			get_str_from_dt(nprop, str_dt, sizeof(str_dt));
@@ -533,6 +540,47 @@ static int smbios_write_type4(ulong *current, int handle,
 	return len;
 }
 
+static int smbios_write_type7_level(ulong *current, int handle,
+				    struct smbios_ctx *ctx, int level)
+{
+	struct smbios_type7 *t;
+	int len = sizeof(struct smbios_type7);
+
+	t = map_sysmem(*current, len);
+	memset(t, 0, sizeof(struct smbios_type7));
+	fill_smbios_header(t, SMBIOS_CACHE_INFORMATION, len, handle);
+	smbios_set_eos(ctx, t->eos);
+
+	printf("=====================> write type7 via sysinfo_get_cache_info\n");
+
+	sysinfo_get_cache_info(level, t);
+
+	len = t->length + smbios_string_table_len(ctx);
+	*current += len;
+	unmap_sysmem(t);
+
+	return len;
+}
+
+static int smbios_write_type7(ulong *current, int handle,
+			      struct smbios_ctx *ctx)
+{
+	int level = 0; /* L1 by default*/
+	int i = 0;
+	int len = 0;
+
+	/* TODO: how to get the cache level without sysinfo? */
+	if (CONFIG_IS_ENABLED(SYSINFO_SMBIOS)) {
+		sysinfo_get_int(ctx->dev, SYSINFO_CACHE_LEVEL, &level);
+		if (level >= SYSINFO_MAX_CACHE_LEVEL)
+			return -ENOTSUPP;
+	}
+	for (i = 0; i <= level; i++) 
+		len += smbios_write_type7_level(current, handle++, ctx, i);
+
+	return len;
+}
+
 static int smbios_write_type32(ulong *current, int handle,
 			       struct smbios_ctx *ctx)
 {
@@ -573,6 +621,7 @@ static struct smbios_write_method smbios_write_funcs[] = {
 	/* Type 3 must immediately follow type 2 due to chassis handle. */
 	{ smbios_write_type3, "chassis", },
 	{ smbios_write_type4, },
+	{ smbios_write_type7, },
 	{ smbios_write_type32, },
 	{ smbios_write_type127 },
 };
@@ -590,16 +639,36 @@ ulong write_smbios_table(ulong addr)
 
 	ctx.node = ofnode_null();
 	if (IS_ENABLED(CONFIG_OF_CONTROL) && CONFIG_IS_ENABLED(SYSINFO)) {
+		int ret;
+
 		uclass_first_device(UCLASS_SYSINFO, &ctx.dev);
 		if (ctx.dev) {
-			int ret;
+			printf("=====================> ctx.dev->name: %s\n", ctx.dev->name);
 
 			parent_node = dev_read_subnode(ctx.dev, "smbios");
-			ret = sysinfo_detect(ctx.dev);
-			if (ret)
+		} else {
+			/* if no device found, bind the platform-specific driver */
+			printf("=====================> no ctx.dev 1\n");
+
+			ret = device_bind_driver(NULL, "sysinfo_smbios_plat", "sysinfo_smbios_plat_drv", &ctx.dev);
+			if (ret) {
+				printf("Failed to bind driver: %d\n", ret);
 				return ret;
+			}
+			ret = device_probe(ctx.dev);
+			if (ret) {
+				printf("Failed to probe device: %d\n", ret);
+				return ret;
+			}
+		}
+		/* detect the device */
+		ret = sysinfo_detect(ctx.dev);
+		if (ret) {
+			printf("Failed to detect driver: %d\n", ret);
+			return ret;
 		}
 	} else {
+		printf("=====================> ctx.dev->name: NULL\n");
 		ctx.dev = NULL;
 	}
 
