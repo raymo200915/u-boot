@@ -8,6 +8,8 @@
 #define LOG_CATEGORY	LOGC_BOARD
 
 #include <dm.h>
+#include <dm/device-internal.h>
+#include <dm/lists.h>
 #include <env.h>
 #include <linux/stringify.h>
 #include <linux/string.h>
@@ -228,6 +230,8 @@ static int smbios_add_prop_si(struct smbios_ctx *ctx, const char *prop,
 	if (!prop)
 		return smbios_add_string(ctx, dval);
 
+	log_debug("smbios: %s, sysinfo id: %d\n", prop, sysinfo_id);
+
 	if (sysinfo_id && ctx->dev) {
 		char val[SMBIOS_STR_MAX];
 
@@ -246,6 +250,8 @@ static int smbios_add_prop_si(struct smbios_ctx *ctx, const char *prop,
 			str = ofnode_read_string(ctx->node, prop);
 		} else {
 			const struct map_sysinfo *nprop;
+
+			log_debug("no smbios node, try the entire DT\n");
 
 			nprop = convert_sysinfo_to_dt(ctx->subnode_name, prop);
 			get_str_from_dt(nprop, str_dt, sizeof(str_dt));
@@ -448,6 +454,10 @@ static int smbios_write_type2(ulong *current, int handle,
 	t->asset_tag_number = smbios_add_prop_si(ctx, "asset-tag",
 						 SYSINFO_ID_SMBIOS_BASEBOARD_ASSET_TAG,
 						 NULL);
+	t->chassis_location =
+		smbios_add_prop_si(ctx, "chassis-location",
+				   SYSINFO_ID_SMBIOS_BASEBOARD_CHASSIS_LOCAT,
+				   NULL);
 	t->feature_flags = SMBIOS_BOARD_FEATURE_HOSTING;
 	t->board_type = SMBIOS_BOARD_MOTHERBOARD;
 	t->chassis_handle = handle + 1;
@@ -469,7 +479,19 @@ static int smbios_write_type3(ulong *current, int handle,
 	memset(t, 0, sizeof(struct smbios_type3));
 	fill_smbios_header(t, SMBIOS_SYSTEM_ENCLOSURE, len, handle);
 	smbios_set_eos(ctx, t->eos);
-	t->manufacturer = smbios_add_prop(ctx, "manufacturer", NULL);
+	t->manufacturer =
+		smbios_add_prop_si(ctx, "manufacturer",
+				   SYSINFO_ID_SMBIOS_ENCLOSURE_MANUFACTURER,
+				   NULL);
+	t->version = smbios_add_prop_si(ctx, "version",
+					SYSINFO_ID_SMBIOS_ENCLOSURE_VERSION,
+					NULL);
+	t->serial_number = smbios_add_prop_si(ctx, "serial",
+					      SYSINFO_ID_SMBIOS_ENCLOSURE_SERIAL,
+					      NULL);
+	t->asset_tag_number = smbios_add_prop_si(ctx, "asset-tag",
+						 SYSINFO_ID_SMBIOS_BASEBOARD_ASSET_TAG,
+						 NULL);
 	t->chassis_type = SMBIOS_ENCLOSURE_DESKTOP;
 	t->bootup_state = SMBIOS_STATE_SAFE;
 	t->power_supply_state = SMBIOS_STATE_SAFE;
@@ -542,6 +564,92 @@ static int smbios_write_type4(ulong *current, int handle,
 	return len;
 }
 
+static int smbios_write_type7_1level(ulong *current, int handle,
+				    struct smbios_ctx *ctx, int level)
+{
+	struct smbios_type7 *t;
+	int len = sizeof(*t);
+	int val;
+
+	t = map_sysmem(*current, len);
+	memset(t, 0, sizeof(*t));
+	fill_smbios_header(t, SMBIOS_CACHE_INFORMATION, len, handle);
+	smbios_set_eos(ctx, t->eos);
+
+	if(!sysinfo_get_int(ctx->dev, SYSINFO_ID_SMBIOS_CACHE_CONFIG + level,
+			    &val))
+		t->config.data = val;
+
+	if(!sysinfo_get_int(ctx->dev, SYSINFO_ID_SMBIOS_CACHE_MAX_SIZE + level,
+			    &val))
+		t->max_size.data = val;
+
+	if(!sysinfo_get_int(ctx->dev, SYSINFO_ID_SMBIOS_CACHE_INST_SIZE + level,
+			    &val))
+		t->inst_size.data = val;
+
+	if(!sysinfo_get_int(ctx->dev,
+			    SYSINFO_ID_SMBIOS_CACHE_SUPP_SRAM_TYPE + level,
+			    &val))
+		t->supp_sram_type.data = val;
+
+	if(!sysinfo_get_int(ctx->dev,
+			    SYSINFO_ID_SMBIOS_CACHE_CURR_SRAM_TYPE + level,
+			    &val))
+		t->curr_sram_type.data = val;
+
+	if(!sysinfo_get_int(ctx->dev, SYSINFO_ID_SMBIOS_CACHE_SPEED + level,
+			    &val))
+		t->speed = val;
+
+	if(!sysinfo_get_int(ctx->dev,
+			    SYSINFO_ID_SMBIOS_CACHE_ERR_CORR_TYPE + level,
+			    &val))
+		t->err_corr_type = val;
+
+	if(!sysinfo_get_int(ctx->dev,
+			    SYSINFO_ID_SMBIOS_CACHE_SYS_CACHE_TYPE + level,
+			    &val))
+		t->sys_cache_type = val;
+
+	if(!sysinfo_get_int(ctx->dev,
+			    SYSINFO_ID_SMBIOS_CACHE_ASSOCIATIVITY + level,
+			    &val))
+		t->associativity = val;
+
+	if(!sysinfo_get_int(ctx->dev, SYSINFO_ID_SMBIOS_CACHE_MAX_SIZE2 + level,
+			    &val))
+		t->max_size2.data = val;
+
+	if(!sysinfo_get_int(ctx->dev,
+			    SYSINFO_ID_SMBIOS_CACHE_INST_SIZE2 + level,
+			    &val))
+		t->inst_size2.data = val;
+
+	len = t->length + smbios_string_table_len(ctx);
+	*current += len;
+	unmap_sysmem(t);
+
+	return len;
+}
+
+static int smbios_write_type7(ulong *current, int handle,
+			      struct smbios_ctx *ctx)
+{
+	int len = 0;
+	int i, ret, level;
+
+	/* Get the number of level */
+	ret = sysinfo_get_int(ctx->dev, SYSINFO_ID_SMBIOS_CACHE_LEVEL, &level);
+	if(ret || level >= SYSINFO_CACHE_LVL_MAX) /* Error, return 0-length */
+		return 0;
+
+	for (i = 0; i <= level; i++)
+		len += smbios_write_type7_1level(current, handle++, ctx, i);
+
+	return len;
+}
+
 static int smbios_write_type32(ulong *current, int handle,
 			       struct smbios_ctx *ctx)
 {
@@ -582,6 +690,7 @@ static struct smbios_write_method smbios_write_funcs[] = {
 	/* Type 3 must immediately follow type 2 due to chassis handle. */
 	{ smbios_write_type3, "chassis", },
 	{ smbios_write_type4, },
+	{ smbios_write_type7, },
 	{ smbios_write_type32, },
 	{ smbios_write_type127 },
 };
@@ -598,7 +707,7 @@ ulong write_smbios_table(ulong addr)
 	int i;
 
 	ctx.node = ofnode_null();
-	if (IS_ENABLED(CONFIG_OF_CONTROL) && CONFIG_IS_ENABLED(SYSINFO)) {
+	if (CONFIG_IS_ENABLED(SYSINFO)) {
 		uclass_first_device(UCLASS_SYSINFO, &ctx.dev);
 		if (ctx.dev) {
 			int ret;
